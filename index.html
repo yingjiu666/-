@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>社团中心全员大会抽奖</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <style>
+        /* CSS 样式区*/
+        body {
+            background-color: #0f0f14; /* 深空黑背景 */
+            color: #ffffff;
+            font-family: 'Microsoft YaHei', sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* 左侧控制栏 */
+        .sidebar {
+            width: 300px;
+            background: #1a1a20;
+            padding: 20px;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        h2 { color: #00e5ff; text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); }
+        label { color: #aaa; font-size: 14px; margin-top: 15px; display: block; }
+        
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background: #2b2b36;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            background: #007acc;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        button:hover { background: #0098ff; }
+
+        /* 主抽奖区 */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            background: radial-gradient(circle at center, #1e1e28 0%, #0f0f14 100%);
+        }
+
+        /* 奖项标题 */
+        #currentPrizeDisplay {
+            font-size: 3rem;
+            color: #ffcc00;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(255, 204, 0, 0.5);
+        }
+
+        /* 滚动名字的大屏幕 */
+        .rolling-box {
+            font-size: 8rem;
+            font-weight: bold;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 0 0 30px #00e5ff;
+            color: #fff;
+        }
+
+        .dept-display {
+            font-size: 2rem;
+            color: #888;
+            margin-top: -20px;
+        }
+
+        /* 开始/停止按钮 */
+        #actionBtn {
+            margin-top: 50px;
+            width: 200px;
+            height: 60px;
+            font-size: 24px;
+            border-radius: 30px;
+            background: linear-gradient(45deg, #00e5ff, #007acc);
+            border: none;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+        }
+        #actionBtn.stop {
+            background: linear-gradient(45deg, #ff416c, #ff4b2b);
+            box-shadow: 0 0 20px rgba(255, 65, 108, 0.4);
+        }
+
+        /* 右侧中奖名单 */
+        .winners-panel {
+            width: 350px;
+            background: #1a1a20;
+            border-left: 1px solid #333;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .winner-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #ffcc00;
+            padding: 10px;
+            margin-bottom: 10px;
+            animation: slideIn 0.5s ease;
+        }
+
+        .winner-card .prize { font-size: 12px; color: #ffcc00; }
+        .winner-card .name { font-size: 20px; font-weight: bold; }
+        .winner-card .dept { font-size: 14px; color: #aaa; }
+
+        @keyframes slideIn {
+            from { transform: translateX(50px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* 弹窗样式 */
+        .modal {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.8);
+            display: flex; justify-content: center; align-items: center;
+            visibility: hidden; opacity: 0;
+            transition: 0.3s;
+            z-index: 100;
+        }
+        .modal.show { visibility: visible; opacity: 1; }
+        .modal-content {
+            background: #2b2b36; padding: 40px; border-radius: 10px;
+            text-align: center; border: 2px solid #ffcc00;
+            box-shadow: 0 0 50px rgba(255, 204, 0, 0.3);
+             /* 限制弹窗大小 + 内容滚动 */
+             min-width: 400px;    /* 最小宽度，保证美观 */
+             max-width: 80%;      /* 最大宽度，适配屏幕 */
+             max-height: 70vh;    /* 最大高度（视口70%），避免溢出 */
+             overflow-y: auto;    /* 内容超出时垂直滚动 */
+             box-sizing: border-box; /* 内边距计入宽高，避免溢出 */
+        }
+        .big-winner-name { 
+            font-size: 36px; 
+            color: #fff; 
+            margin: 20px 0;
+            line-height: 1.8;    /* 行高*/
+            white-space: pre-line; /* 支持换行符，名字分行显示 */
+            word-break: break-all; /* 极端情况强制换行 */ }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>⚙️ 操作台</h2>
+        
+        <label>1. 导入数据 (Excel)</label>
+        <input type="file" id="fileInput" accept=".xlsx, .xls" />
+        <div id="statusText" style="color: #666; font-size: 12px; margin-top:5px;">等待导入...</div>
+
+        <div style="margin-top: 30px; border-top: 1px solid #333; padding-top: 20px;">
+            <label>2. 奖项设置</label>
+            <input type="text" id="prizeName" value="三等奖" placeholder="输入奖项名称">
+            
+            <label>本轮抽取人数</label>
+            <input type="number" id="prizeCount" value="1" min="1">
+        </div>
+
+        <button id="downloadBtn" style="margin-top: auto; background: #28a745;">💾 导出中奖名单</button>
+    </div>
+
+    <div class="main-area">
+        <div id="currentPrizeDisplay">等待开始</div>
+        
+        <div class="rolling-box" id="rollingName">???</div>
+        <div class="dept-display" id="rollingDept">---</div>
+
+        <button id="actionBtn">开始抽奖</button>
+    </div>
+
+    <div class="winners-panel">
+        <h2 style="color: #ffcc00;">🏆 中奖名单</h2>
+        <div id="winnersList">
+            </div>
+    </div>
+
+    <div class="modal" id="winnerModal">
+        <div class="modal-content">
+            <h2 style="margin:0; color:#aaa;">🎉 恭喜中奖 🎉</h2>
+            <div class="big-winner-name" id="modalName">张三</div>
+            <div style="font-size: 24px; color: #ffcc00;" id="modalPrize">特等奖</div>
+            <button onclick="document.getElementById('winnerModal').classList.remove('show')" style="margin-top:20px;">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        let allParticipants = []; // 总池
+        let remainingParticipants = []; // 剩余池
+        let winners = []; // 已中奖名单
+        let timer = null;
+        let isRolling = false;
+
+        const fileInput = document.getElementById('fileInput');
+        const statusText = document.getElementById('statusText');
+        const rollingName = document.getElementById('rollingName');
+        const rollingDept = document.getElementById('rollingDept');
+        const actionBtn = document.getElementById('actionBtn');
+        const prizeNameInput = document.getElementById('prizeName');
+        const prizeCountInput = document.getElementById('prizeCount');
+        const winnersList = document.getElementById('winnersList');
+        const currentPrizeDisplay = document.getElementById('currentPrizeDisplay');
+
+        // 1. 读取 Excel 文件
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                
+                // 将 Excel 转换为 JSON (假设第一行是表头: 姓名, 部门)
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                
+                // 处理数据：跳过表头，提取数据
+                // 假设 Excel 格式：A列=姓名, B列=部门
+                allParticipants = [];
+                for (let i = 1; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (row[0]) { // 只要姓名不为空
+                        allParticipants.push({
+                            name: row[0],
+                            dept: row[1] || "未知部门" // 如果部门没填，默认公司
+                        });
+                    }
+                }
+
+                remainingParticipants = [...allParticipants]; // 复制一份到剩余池
+                statusText.innerText = `✅ 导入成功：共 ${allParticipants.length} 人`;
+                statusText.style.color = "#00e5ff";
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // 2. 按钮点击逻辑
+        actionBtn.addEventListener('click', () => {
+            if (remainingParticipants.length === 0) {
+                alert("还没有导入名单！");
+                return;
+            }
+
+            if (!isRolling) {
+                // 开始滚动
+                startRolling();
+            } else {
+                // 停止滚动并抽奖
+                stopRolling();
+            }
+        });
+
+        function startRolling() {
+            isRolling = true;
+            actionBtn.innerText = "停止";
+            actionBtn.classList.add("stop");
+            currentPrizeDisplay.innerText = "正在抽取: " + prizeNameInput.value;
+            
+            // 极速滚动动画
+            timer = setInterval(() => {
+                const randomIdx = Math.floor(Math.random() * remainingParticipants.length);
+                const p = remainingParticipants[randomIdx];
+                rollingName.innerText = p.name;
+                rollingDept.innerText = p.dept;
+            }, 50); // 每50毫秒换一次名字
+        }
+
+        function stopRolling() {
+            clearInterval(timer);
+            isRolling = false;
+            actionBtn.innerText = "开始抽奖";
+            actionBtn.classList.remove("stop");
+
+            const count = parseInt(prizeCountInput.value) || 1;
+            const currentPrize = prizeNameInput.value;
+            
+            // 抽取逻辑
+            const roundWinners = [];
+            for (let i = 0; i < count; i++) {
+                if (remainingParticipants.length === 0) break;
+                const winIdx = Math.floor(Math.random() * remainingParticipants.length);
+                roundWinners.push(remainingParticipants[winIdx]);
+                remainingParticipants.splice(winIdx, 1); // 从剩余池移除
+            }
+
+            // 更新状态
+            statusText.innerText = `剩余人数: ${remainingParticipants.length}`;
+
+            // 显示结果
+            // if (roundWinners.length === 1) {
+            //     // 单人中奖：显示名字并弹窗
+            //     const winner = roundWinners[0];
+            //     rollingName.innerText = winner.name;
+            //     rollingDept.innerText = winner.dept;
+                
+            //     // 弹窗特效
+            //     document.getElementById('modalName').innerText = winner.name;
+            //     document.getElementById('modalPrize').innerText = currentPrize;
+            //     document.getElementById('winnerModal').classList.add('show');
+            // } else {
+            //     // // 多人中奖：显示数量
+            //     rollingName.innerText = `恭喜 ${roundWinners.length} 位`;
+            //     rollingDept.innerText = "请查看右侧榜单";
+                
+            // }
+            if (roundWinners.length > 0) {
+         // 1. 拼接所有中奖人的名字（换行分隔）
+         const winnerNames = roundWinners.map(winner => winner.name).join('\n');
+        // 2. 更新弹窗内容
+        document.getElementById('modalName').innerText = winnerNames;
+        document.getElementById('modalPrize').innerText = currentPrize;
+        // 3. 显示弹窗（无论人数多少）
+        document.getElementById('winnerModal').classList.add('show');
+
+        // 4. 主界面文字提示（保持原有逻辑）
+        if (roundWinners.length === 1) {
+            rollingName.innerText = roundWinners[0].name;
+            rollingDept.innerText = roundWinners[0].dept;
+        } else {
+            rollingName.innerText = `恭喜 ${roundWinners.length} 位`;
+            rollingDept.innerText = "请查看右侧榜单";
+        }
+    }
+            // 添加到右侧列表
+            roundWinners.forEach(w => {
+                winners.push({ ...w, prize: currentPrize });
+                const div = document.createElement('div');
+                div.className = 'winner-card';
+                div.innerHTML = `
+                    <div class="prize">${currentPrize}</div>
+                    <div class="name">${w.name}</div>
+                    <div class="dept">${w.dept}</div>
+                `;
+                winnersList.prepend(div); // 新中奖的在最上面
+            });
+        }
+
+        // 3. 导出名单
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (winners.length === 0) {
+                alert("还没人中奖呢！");
+                return;
+            }
+            
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; //加BOM防止乱码
+            csvContent += "奖项,姓名,部门\n";
+            winners.forEach(w => {
+                csvContent += `${w.prize},${w.name},${w.dept}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "中奖名单.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
